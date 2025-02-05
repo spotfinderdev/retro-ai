@@ -34,7 +34,7 @@ export default function RetroDashboard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer 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`
+          "Authorization": `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`
         },
         body: JSON.stringify({
           model: "gpt-4",
