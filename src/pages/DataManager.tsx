@@ -1,37 +1,94 @@
 import React, { useEffect, useState } from "react";
 import { fetchData, fetchCategories, saveData, addCategory } from "../services/dataService";
-import { Card, CardContent, Typography, Container, Box, TextField, Button, IconButton } from "@mui/material";
-import { Add, Save } from "@mui/icons-material";
+import { 
+  Card, CardContent, Typography, Container, Box, TextField, Button, IconButton, List, ListItem, ListItemText, Checkbox 
+} from "@mui/material";
+import { Add, Save, Delete } from "@mui/icons-material";
 
 export default function DataManager() {
   const [data, setData] = useState<{ [key: string]: string[] }>({});
   const [categories, setCategories] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState("");
+  const [newEntries, setNewEntries] = useState<{ [key: string]: string }>({});
+  const [selectedItems, setSelectedItems] = useState<{ [key: string]: Set<string> }>({});
 
+  // 🔹 Cargar datos y categorías al iniciar
   useEffect(() => {
     fetchData()
       .then((result) => {
-        setData(result as { [key: string]: string[] }); // 🔹 Aseguramos el tipo correcto
-      })
-      .catch((error) => console.error("Error al obtener datos:", error));
+        console.log("📥 Datos cargados desde API:", result);
 
-    fetchCategories()
-      .then((categories) => setCategories(categories))
-      .catch((error) => console.error("Error al obtener categorías:", error));
+        const cleanData = Object.fromEntries(
+          Object.entries(result)
+            .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos")) // Filtrar `_id` y categorías sin datos
+            .map(([key, value]) => [key, Array.isArray(value) ? value : []]) // Asegurar que cada categoría es un array
+        );
+
+        setData(cleanData);
+        setCategories(Object.keys(cleanData));
+      })
+      .catch((error) => console.error("❌ Error al obtener datos:", error));
   }, []);
 
+  // 🔹 Guardar cambios en la BD
   const handleSave = async () => {
     await saveData(data);
-    fetchData().then((result) => setData(result as { [key: string]: string[] }));
+    fetchData().then((result) => {
+      const updatedData = Object.fromEntries(
+        Object.entries(result)
+          .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos"))
+          .map(([key, value]) => [key, Array.isArray(value) ? value : []])
+      );
+
+      setData(updatedData);
+      setCategories(Object.keys(updatedData));
+    });
   };
 
+  // 🔹 Agregar una nueva categoría
   const handleAddCategory = async () => {
     if (newCategory.trim() !== "") {
       await addCategory(newCategory);
       setNewCategory("");
-      fetchCategories().then(setCategories);
-      fetchData().then((result) => setData(result as { [key: string]: string[] }));
+      fetchData().then((result) => {
+        const updatedData = Object.fromEntries(
+          Object.entries(result)
+            .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos"))
+            .map(([key, value]) => [key, Array.isArray(value) ? value : []])
+        );
+        setData(updatedData);
+        setCategories(Object.keys(updatedData));
+      });
     }
+  };
+
+  // 🔹 Agregar un nuevo ítem a una categoría
+  const handleAddItem = (category: string) => {
+    if (newEntries[category]?.trim()) {
+      setData((prevData) => ({
+        ...prevData,
+        [category]: [...(prevData[category] || []), newEntries[category].trim()],
+      }));
+      setNewEntries((prevEntries) => ({ ...prevEntries, [category]: "" })); // Limpiar input
+    }
+  };
+
+  // 🔹 Manejo de selección para eliminar elementos
+  const handleToggleSelect = (category: string, item: string) => {
+    setSelectedItems((prev) => {
+      const updatedSet = new Set(prev[category] || []);
+      updatedSet.has(item) ? updatedSet.delete(item) : updatedSet.add(item);
+      return { ...prev, [category]: updatedSet };
+    });
+  };
+
+  // 🔹 Eliminar elementos seleccionados de una categoría
+  const handleDeleteSelected = (category: string) => {
+    setData((prevData) => ({
+      ...prevData,
+      [category]: prevData[category].filter((item) => !(selectedItems[category]?.has(item))),
+    }));
+    setSelectedItems((prev) => ({ ...prev, [category]: new Set() })); // Limpiar selección
   };
 
   return (
@@ -46,23 +103,55 @@ export default function DataManager() {
             <Typography variant="h6" fontWeight="bold" gutterBottom>
               {category}
             </Typography>
-            <TextField
-              fullWidth
-              multiline
-              rows={5}
-              value={data[category]?.join("\n") || "No existen datos"}
-              onChange={(e) =>
-                setData({
-                  ...data,
-                  [category]: e.target.value.trim() ? e.target.value.split("\n") : ["No existen datos"],
-                })
-              }
-              sx={{ mb: 2 }}
-            />
+
+            {/* 🔹 Lista de elementos con checkboxes */}
+            <List sx={{ maxHeight: 200, overflowY: "auto", border: "1px solid #ddd", borderRadius: 2, padding: 1 }}>
+              {data[category] && data[category].length > 0 ? (
+                data[category].map((item, index) => (
+                  <ListItem key={index} dense>
+                    <Checkbox
+                      checked={selectedItems[category]?.has(item) || false}
+                      onChange={() => handleToggleSelect(category, item)}
+                    />
+                    <ListItemText primary={item} />
+                  </ListItem>
+                ))
+              ) : (
+                <Typography color="textSecondary" align="center">
+                  No hay datos en esta categoría.
+                </Typography>
+              )}
+            </List>
+
+            {/* 🔹 Botón para eliminar elementos seleccionados */}
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<Delete />}
+              onClick={() => handleDeleteSelected(category)}
+              sx={{ mt: 1, mb: 2 }}
+              disabled={!selectedItems[category] || selectedItems[category].size === 0}
+            >
+              Eliminar seleccionados
+            </Button>
+
+            {/* 🔹 Input para agregar nuevos elementos */}
+            <Box display="flex" alignItems="center" gap={1}>
+              <TextField
+                fullWidth
+                placeholder="Agregar nuevo ítem"
+                value={newEntries[category] || ""}
+                onChange={(e) => setNewEntries({ ...newEntries, [category]: e.target.value })}
+              />
+              <IconButton onClick={() => handleAddItem(category)} color="primary">
+                <Add />
+              </IconButton>
+            </Box>
           </CardContent>
         </Card>
       ))}
 
+      {/* 🔹 Agregar nueva categoría */}
       <Box display="flex" alignItems="center" gap={2} sx={{ mb: 2 }}>
         <TextField
           fullWidth
@@ -75,6 +164,7 @@ export default function DataManager() {
         </IconButton>
       </Box>
 
+      {/* 🔹 Guardar cambios en BD */}
       <Button variant="contained" color="primary" onClick={handleSave} startIcon={<Save />}>
         Guardar Cambios
       </Button>
