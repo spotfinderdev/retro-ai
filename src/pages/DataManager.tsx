@@ -1,9 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { fetchData, fetchCategories, saveData, addCategory } from "../services/dataService";
+import { fetchData, saveData, addCategory } from "../services/dataService";
 import { 
   Card, CardContent, Typography, Container, Box, TextField, Button, IconButton, List, ListItem, ListItemText, Checkbox 
 } from "@mui/material";
 import { Add, Save, Delete } from "@mui/icons-material";
+
+// 🔹 Función para formatear nombres de categorías para la UI
+const formatCategoryName = (category: string) => {
+  return category.replace(/([A-Z])/g, " $1").trim().replace(/^./, (str) => str.toUpperCase());
+};
+
+// 🔹 Función para revertir el formato de nombres de categorías antes de almacenarlas en la BD
+const revertCategoryName = (category: string) => {
+  return category.replace(/\s+/g, "");
+};
 
 export default function DataManager() {
   const [data, setData] = useState<{ [key: string]: string[] }>({});
@@ -20,8 +30,8 @@ export default function DataManager() {
 
         const cleanData = Object.fromEntries(
           Object.entries(result)
-            .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos")) // Filtrar `_id` y categorías sin datos
-            .map(([key, value]) => [key, Array.isArray(value) ? value : []]) // Asegurar que cada categoría es un array
+            .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos"))
+            .map(([key, value]) => [formatCategoryName(key), Array.isArray(value) ? value : []]) // Formatear nombre
         );
 
         setData(cleanData);
@@ -32,12 +42,16 @@ export default function DataManager() {
 
   // 🔹 Guardar cambios en la BD
   const handleSave = async () => {
-    await saveData(data);
+    const formattedData = Object.fromEntries(
+      Object.entries(data).map(([key, value]) => [revertCategoryName(key), value])
+    );
+
+    await saveData(formattedData);
     fetchData().then((result) => {
       const updatedData = Object.fromEntries(
         Object.entries(result)
           .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos"))
-          .map(([key, value]) => [key, Array.isArray(value) ? value : []])
+          .map(([key, value]) => [formatCategoryName(key), Array.isArray(value) ? value : []])
       );
 
       setData(updatedData);
@@ -48,17 +62,17 @@ export default function DataManager() {
   // 🔹 Agregar una nueva categoría
   const handleAddCategory = async () => {
     if (newCategory.trim() !== "") {
-      await addCategory(newCategory);
+      const formattedName = revertCategoryName(newCategory);
+      
+      await addCategory(formattedName); // Agregar la nueva categoría en la BD
+
+      setData((prevData) => ({
+        ...prevData,
+        [formatCategoryName(formattedName)]: [], // Mostrar inmediatamente en UI con formato correcto
+      }));
+
+      setCategories((prevCategories) => [...prevCategories, formatCategoryName(formattedName)]);
       setNewCategory("");
-      fetchData().then((result) => {
-        const updatedData = Object.fromEntries(
-          Object.entries(result)
-            .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos"))
-            .map(([key, value]) => [key, Array.isArray(value) ? value : []])
-        );
-        setData(updatedData);
-        setCategories(Object.keys(updatedData));
-      });
     }
   };
 
