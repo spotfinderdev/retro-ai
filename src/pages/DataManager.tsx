@@ -1,58 +1,83 @@
 import React, { useEffect, useState } from "react";
-import { fetchData, addData, updateData, deleteData, fetchCategories } from "../services/dataService";
-import { Card, CardContent, Typography, Container, Box, TextField, Button, List, ListItem, ListItemText, IconButton, MenuItem, Select } from "@mui/material";
-import { Delete, Edit } from "@mui/icons-material";
-
-interface RetroData {
-  _id?: string;
-  category: string;
-  content: string;
-}
+import { fetchData, fetchCategories, saveData, addCategory } from "../services/dataService";
+import { Card, CardContent, Typography, Container, Box, TextField, Button, IconButton } from "@mui/material";
+import { Add, Save } from "@mui/icons-material";
 
 export default function DataManager() {
-  const [data, setData] = useState<RetroData[]>([]);
+  const [data, setData] = useState<{ [key: string]: string[] }>({});
   const [categories, setCategories] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState("");
-  const [newEntry, setNewEntry] = useState({ category: "", content: "" });
-  const [editId, setEditId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData().then(setData);
-    fetchCategories().then(setCategories);
+    fetchData()
+      .then((result) => {
+        setData(result as { [key: string]: string[] }); // 🔹 Aseguramos el tipo correcto
+      })
+      .catch((error) => console.error("Error al obtener datos:", error));
+
+    fetchCategories()
+      .then((categories) => setCategories(categories))
+      .catch((error) => console.error("Error al obtener categorías:", error));
   }, []);
 
   const handleSave = async () => {
-    if (!categories.includes(newEntry.category) && newEntry.category) {
-      setCategories((prev) => [...prev, newEntry.category]); // Agregar nueva categoría si no existe
+    await saveData(data);
+    fetchData().then((result) => setData(result as { [key: string]: string[] }));
+  };
+
+  const handleAddCategory = async () => {
+    if (newCategory.trim() !== "") {
+      await addCategory(newCategory);
+      setNewCategory("");
+      fetchCategories().then(setCategories);
+      fetchData().then((result) => setData(result as { [key: string]: string[] }));
     }
-    if (editId) {
-      await updateData(editId, newEntry);
-    } else {
-      await addData(newEntry);
-    }
-    setNewEntry({ category: "", content: "" });
-    setEditId(null);
-    fetchData().then(setData);
   };
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" align="center">Administrador de Datos</Typography>
+      <Typography variant="h4" align="center" fontWeight="bold" gutterBottom>
+        Administrador de Datos
+      </Typography>
 
-      <Card sx={{ p: 3, mb: 4 }}>
-        <CardContent>
-          <Typography variant="h6">Agregar / Editar Datos</Typography>
-          <Select fullWidth value={newEntry.category} onChange={(e) => setNewEntry({ ...newEntry, category: e.target.value })} displayEmpty sx={{ mb: 2 }}>
-            <MenuItem value="" disabled>Selecciona una categoría</MenuItem>
-            {categories.map((category) => (
-              <MenuItem key={category} value={category}>{category}</MenuItem>
-            ))}
-          </Select>
-          <TextField fullWidth label="Nueva Categoría" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} onBlur={() => newCategory && setCategories([...categories, newCategory])} />
-          <TextField fullWidth label="Contenido" multiline rows={3} value={newEntry.content} onChange={(e) => setNewEntry({ ...newEntry, content: e.target.value })} sx={{ mt: 2 }} />
-          <Button variant="contained" color="primary" onClick={handleSave}>{editId ? "Actualizar" : "Agregar"}</Button>
-        </CardContent>
-      </Card>
+      {categories.map((category) => (
+        <Card key={category} sx={{ mb: 4 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight="bold" gutterBottom>
+              {category}
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              rows={5}
+              value={data[category]?.join("\n") || "No existen datos"}
+              onChange={(e) =>
+                setData({
+                  ...data,
+                  [category]: e.target.value.trim() ? e.target.value.split("\n") : ["No existen datos"],
+                })
+              }
+              sx={{ mb: 2 }}
+            />
+          </CardContent>
+        </Card>
+      ))}
+
+      <Box display="flex" alignItems="center" gap={2} sx={{ mb: 2 }}>
+        <TextField
+          fullWidth
+          label="Nueva Categoría"
+          value={newCategory}
+          onChange={(e) => setNewCategory(e.target.value)}
+        />
+        <IconButton onClick={handleAddCategory} color="primary">
+          <Add />
+        </IconButton>
+      </Box>
+
+      <Button variant="contained" color="primary" onClick={handleSave} startIcon={<Save />}>
+        Guardar Cambios
+      </Button>
     </Container>
   );
 }
