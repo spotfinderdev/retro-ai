@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { fetchData, saveData, addCategory } from "../services/dataService";
+import { fetchData, saveCategory, addCategory, saveData } from "../services/dataService";
 import { 
   Card, CardContent, Typography, Container, Box, TextField, Button, IconButton, List, ListItem, ListItemText, Checkbox 
 } from "@mui/material";
 import { Add, Save, Delete } from "@mui/icons-material";
 
-// 🔹 Función para formatear nombres de categorías para la UI
+// 🔹 Formatear nombres de categorías para la UI
 const formatCategoryName = (category: string) => {
   return category.replace(/([A-Z])/g, " $1").trim().replace(/^./, (str) => str.toUpperCase());
 };
 
-// 🔹 Función para revertir el formato de nombres de categorías antes de almacenarlas en la BD
+// 🔹 Revertir el formato antes de almacenar en la BD
 const revertCategoryName = (category: string) => {
   return category.replace(/\s+/g, "");
 };
@@ -22,16 +22,16 @@ export default function DataManager() {
   const [newEntries, setNewEntries] = useState<{ [key: string]: string }>({});
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: Set<string> }>({});
 
-  // 🔹 Cargar datos y categorías al iniciar
+  // 🔹 Cargar datos al iniciar
   useEffect(() => {
     fetchData()
       .then((result) => {
         console.log("📥 Datos cargados desde API:", result);
 
-        const cleanData = Object.fromEntries(
+        const cleanData: { [key: string]: string[] } = Object.fromEntries(
           Object.entries(result)
-            .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos"))
-            .map(([key, value]) => [formatCategoryName(key), Array.isArray(value) ? value : []]) // Formatear nombre
+            .filter(([key, value]) => key !== "_id" && Array.isArray(value))
+            .map(([key, value]) => [formatCategoryName(key), value as string[]])
         );
 
         setData(cleanData);
@@ -40,18 +40,20 @@ export default function DataManager() {
       .catch((error) => console.error("❌ Error al obtener datos:", error));
   }, []);
 
-  // 🔹 Guardar cambios en la BD
+  // 🔹 Guardar TODOS los cambios en la BD manualmente
   const handleSave = async () => {
     const formattedData = Object.fromEntries(
       Object.entries(data).map(([key, value]) => [revertCategoryName(key), value])
     );
 
     await saveData(formattedData);
+
+    // 🔄 Recargar datos después de guardar
     fetchData().then((result) => {
-      const updatedData = Object.fromEntries(
+      const updatedData: { [key: string]: string[] } = Object.fromEntries(
         Object.entries(result)
-          .filter(([key, value]) => key !== "_id" && !(Array.isArray(value) && value.length === 1 && value[0] === "No existen datos"))
-          .map(([key, value]) => [formatCategoryName(key), Array.isArray(value) ? value : []])
+          .filter(([key, value]) => key !== "_id" && Array.isArray(value))
+          .map(([key, value]) => [formatCategoryName(key), value as string[]])
       );
 
       setData(updatedData);
@@ -59,16 +61,16 @@ export default function DataManager() {
     });
   };
 
-  // 🔹 Agregar una nueva categoría
+  // 🔹 Agregar una nueva categoría y guardarla en la BD
   const handleAddCategory = async () => {
     if (newCategory.trim() !== "") {
       const formattedName = revertCategoryName(newCategory);
-      
-      await addCategory(formattedName); // Agregar la nueva categoría en la BD
+
+      await addCategory(formattedName); // Guardar en BD
 
       setData((prevData) => ({
         ...prevData,
-        [formatCategoryName(formattedName)]: [], // Mostrar inmediatamente en UI con formato correcto
+        [formatCategoryName(formattedName)]: [],
       }));
 
       setCategories((prevCategories) => [...prevCategories, formatCategoryName(formattedName)]);
@@ -76,14 +78,21 @@ export default function DataManager() {
     }
   };
 
-  // 🔹 Agregar un nuevo ítem a una categoría
-  const handleAddItem = (category: string) => {
+  // 🔹 Agregar un nuevo ítem a una categoría y guardarlo en la BD
+  const handleAddItem = async (category: string) => {
     if (newEntries[category]?.trim()) {
+      const newItem = newEntries[category].trim();
+      const updatedCategoryItems = [...(data[category] || []), newItem];
+
       setData((prevData) => ({
         ...prevData,
-        [category]: [...(prevData[category] || []), newEntries[category].trim()],
+        [category]: updatedCategoryItems,
       }));
+
       setNewEntries((prevEntries) => ({ ...prevEntries, [category]: "" })); // Limpiar input
+
+      // 🔹 Guardar el nuevo ítem en la BD inmediatamente
+      await saveCategory(revertCategoryName(category), updatedCategoryItems);
     }
   };
 
@@ -96,13 +105,19 @@ export default function DataManager() {
     });
   };
 
-  // 🔹 Eliminar elementos seleccionados de una categoría
-  const handleDeleteSelected = (category: string) => {
+  // 🔹 Eliminar elementos seleccionados de una categoría y actualizar en la BD
+  const handleDeleteSelected = async (category: string) => {
+    const updatedItems = data[category].filter((item) => !(selectedItems[category]?.has(item)));
+
     setData((prevData) => ({
       ...prevData,
-      [category]: prevData[category].filter((item) => !(selectedItems[category]?.has(item))),
+      [category]: updatedItems,
     }));
+
     setSelectedItems((prev) => ({ ...prev, [category]: new Set() })); // Limpiar selección
+
+    // 🔹 Guardar cambios en la BD solo para esta categoría
+    await saveCategory(revertCategoryName(category), updatedItems);
   };
 
   return (
@@ -178,7 +193,7 @@ export default function DataManager() {
         </IconButton>
       </Box>
 
-      {/* 🔹 Guardar cambios en BD */}
+      {/* 🔹 Guardar todos los cambios en la BD */}
       <Button variant="contained" color="primary" onClick={handleSave} startIcon={<Save />}>
         Guardar Cambios
       </Button>
