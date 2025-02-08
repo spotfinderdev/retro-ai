@@ -122,9 +122,22 @@ export default function DataManager() {
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" align="center" fontWeight="bold" gutterBottom>
-        Administrador de Datos
-      </Typography>
+        
+      <Box sx={{ textAlign: "center", mb: 4 }}>
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: "bold",
+            letterSpacing: 2,
+            textShadow: "2px 2px 6px rgba(0, 0, 0, 0.3)",
+            background: "linear-gradient(90deg, #FF6E4B, #0077C8, #4CAF50)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
+          ::KyourD:: DataManager
+        </Typography>
+      </Box>
 
       {categories.map((category) => (
         <Card key={category} sx={{ mb: 4 }}>

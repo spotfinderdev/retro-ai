@@ -86,12 +86,27 @@ export default function RetroDashboard() {
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" align="center">Retrospectiva del Equipo</Typography>
 
+     <Box sx={{ textAlign: "center", mb: 4 }}>
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: "bold",
+            letterSpacing: 2, // 🔹 Espaciado entre letras
+            textShadow: "2px 2px 6px rgba(0, 0, 0, 0.3)", // 🔹 Sombra para profundidad
+            background: "linear-gradient(90deg, #FF6E4B, #0077C8, #4CAF50)", // 🎨 Degradado en el texto
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
+          ::KyourD:: Dashboard
+        </Typography>
+      </Box>
+      
       {/* 🔹 Gráfico de Pastel Dinámico */}
       <Card sx={{ mb: 4, p: 3 }}>
         <CardContent>
-          <Typography variant="h6">Distribución General</Typography>
+          <Typography variant="h6">General Distribution</Typography>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
