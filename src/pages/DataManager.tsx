@@ -3,14 +3,12 @@ import { fetchData, saveCategory, addCategory, saveData } from "../services/data
 import { 
   Card, CardContent, Typography, Container, Box, TextField, Button, IconButton, List, ListItem, ListItemText, Checkbox 
 } from "@mui/material";
-import { Add, Save, Delete } from "@mui/icons-material";
+import { Add, Save, Delete, UploadFile } from "@mui/icons-material";
 
-// 🔹 Formatear nombres de categorías para la UI
 const formatCategoryName = (category: string) => {
   return category.replace(/([A-Z])/g, " $1").trim().replace(/^./, (str) => str.toUpperCase());
 };
 
-// 🔹 Revertir el formato antes de almacenar en la BD
 const revertCategoryName = (category: string) => {
   return category.replace(/\s+/g, "");
 };
@@ -21,8 +19,8 @@ export default function DataManager() {
   const [newCategory, setNewCategory] = useState("");
   const [newEntries, setNewEntries] = useState<{ [key: string]: string }>({});
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: Set<string> }>({});
+  const [csvFiles, setCsvFiles] = useState<{ [key: string]: File | null }>({});
 
-  // 🔹 Cargar datos al iniciar
   useEffect(() => {
     fetchData()
       .then((result) => {
@@ -40,7 +38,6 @@ export default function DataManager() {
       .catch((error) => console.error("❌ Error al obtener datos:", error));
   }, []);
 
-  // 🔹 Guardar TODOS los cambios en la BD manualmente
   const handleSave = async () => {
     const formattedData = Object.fromEntries(
       Object.entries(data).map(([key, value]) => [revertCategoryName(key), value])
@@ -48,7 +45,6 @@ export default function DataManager() {
 
     await saveData(formattedData);
 
-    // 🔄 Recargar datos después de guardar
     fetchData().then((result) => {
       const updatedData: { [key: string]: string[] } = Object.fromEntries(
         Object.entries(result)
@@ -61,12 +57,10 @@ export default function DataManager() {
     });
   };
 
-  // 🔹 Agregar una nueva categoría y guardarla en la BD
   const handleAddCategory = async () => {
     if (newCategory.trim() !== "") {
       const formattedName = revertCategoryName(newCategory);
-
-      await addCategory(formattedName); // Guardar en BD
+      await addCategory(formattedName);
 
       setData((prevData) => ({
         ...prevData,
@@ -78,7 +72,6 @@ export default function DataManager() {
     }
   };
 
-  // 🔹 Agregar un nuevo ítem a una categoría y guardarlo en la BD
   const handleAddItem = async (category: string) => {
     if (newEntries[category]?.trim()) {
       const newItem = newEntries[category].trim();
@@ -89,14 +82,12 @@ export default function DataManager() {
         [category]: updatedCategoryItems,
       }));
 
-      setNewEntries((prevEntries) => ({ ...prevEntries, [category]: "" })); // Limpiar input
+      setNewEntries((prevEntries) => ({ ...prevEntries, [category]: "" }));
 
-      // 🔹 Guardar el nuevo ítem en la BD inmediatamente
       await saveCategory(revertCategoryName(category), updatedCategoryItems);
     }
   };
 
-  // 🔹 Manejo de selección para eliminar elementos
   const handleToggleSelect = (category: string, item: string) => {
     setSelectedItems((prev) => {
       const updatedSet = new Set(prev[category] || []);
@@ -105,24 +96,49 @@ export default function DataManager() {
     });
   };
 
-  // 🔹 Eliminar elementos seleccionados de una categoría y actualizar en la BD
   const handleDeleteSelected = async (category: string) => {
     const updatedItems = data[category].filter((item) => !(selectedItems[category]?.has(item)));
 
     setData((prevData) => ({
-      ...prevData,
-      [category]: updatedItems,
-    }));
+        ...prevData,
+        [category]: updatedItems,
+      }));
 
-    setSelectedItems((prev) => ({ ...prev, [category]: new Set() })); // Limpiar selección
+    setSelectedItems((prev) => ({ ...prev, [category]: new Set() }));
 
-    // 🔹 Guardar cambios en la BD solo para esta categoría
     await saveCategory(revertCategoryName(category), updatedItems);
+  };
+
+  const handleCsvUpload = async (categoryName: string) => {
+    if (!csvFiles[categoryName]) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      const rows = text.split("\n").map((row) => row.trim()).filter((row) => row.length > 0);
+
+      if (rows.length < 2) {
+        alert("El archivo CSV no tiene datos suficientes.");
+        return;
+      }
+
+      const newEntries = rows.slice(1).map((row) => row.split(",").map((val) => val.trim()).join(" | "));
+
+      setData((prevData) => ({
+        ...prevData,
+        [categoryName]: [...(prevData[categoryName] || []), ...newEntries],
+      }));
+
+      await saveCategory(revertCategoryName(categoryName), [...(data[categoryName] || []), ...newEntries]);
+
+      setCsvFiles((prev) => ({ ...prev, [categoryName]: null }));
+    };
+
+    reader.readAsText(csvFiles[categoryName]!);
   };
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-        
       <Box sx={{ textAlign: "center", mb: 4 }}>
         <Typography
           variant="h4"
@@ -146,15 +162,11 @@ export default function DataManager() {
               {category}
             </Typography>
 
-            {/* 🔹 Lista de elementos con checkboxes */}
             <List sx={{ maxHeight: 200, overflowY: "auto", border: "1px solid #ddd", borderRadius: 2, padding: 1 }}>
               {data[category] && data[category].length > 0 ? (
                 data[category].map((item, index) => (
                   <ListItem key={index} dense>
-                    <Checkbox
-                      checked={selectedItems[category]?.has(item) || false}
-                      onChange={() => handleToggleSelect(category, item)}
-                    />
+                    <Checkbox checked={selectedItems[category]?.has(item) || false} onChange={() => handleToggleSelect(category, item)} />
                     <ListItemText primary={item} />
                   </ListItem>
                 ))
@@ -165,48 +177,34 @@ export default function DataManager() {
               )}
             </List>
 
-            {/* 🔹 Botón para eliminar elementos seleccionados */}
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={<Delete />}
-              onClick={() => handleDeleteSelected(category)}
-              sx={{ mt: 1, mb: 2 }}
-              disabled={!selectedItems[category] || selectedItems[category].size === 0}
-            >
-              Eliminar seleccionados
-            </Button>
-
-            {/* 🔹 Input para agregar nuevos elementos */}
-            <Box display="flex" alignItems="center" gap={1}>
-              <TextField
-                fullWidth
-                placeholder="Agregar nuevo ítem"
-                value={newEntries[category] || ""}
-                onChange={(e) => setNewEntries({ ...newEntries, [category]: e.target.value })}
-              />
+            <Box display="flex" alignItems="center" gap={1} mt={1}>
+              <TextField fullWidth placeholder="Agregar nuevo ítem" value={newEntries[category] || ""} onChange={(e) => setNewEntries({ ...newEntries, [category]: e.target.value })} />
               <IconButton onClick={() => handleAddItem(category)} color="primary">
                 <Add />
               </IconButton>
+            </Box>
+
+            <Box display="flex" gap={2} mt={2}>
+              <Button variant="contained" color="error" startIcon={<Delete />} onClick={() => handleDeleteSelected(category)} disabled={!selectedItems[category] || selectedItems[category].size === 0}>
+                Eliminar seleccionados
+              </Button>
+
+              <Button component="label" variant="contained" startIcon={<UploadFile />} sx={{ background: "#0077C8", color: "#fff", "&:hover": { background: "#005999" } }}>
+                Cargar CSV
+                <input type="file" accept=".csv" hidden onChange={(e) => setCsvFiles({ ...csvFiles, [category]: e.target.files?.[0] || null })} />
+              </Button>
             </Box>
           </CardContent>
         </Card>
       ))}
 
-      {/* 🔹 Agregar nueva categoría */}
       <Box display="flex" alignItems="center" gap={2} sx={{ mb: 2 }}>
-        <TextField
-          fullWidth
-          label="Nueva Categoría"
-          value={newCategory}
-          onChange={(e) => setNewCategory(e.target.value)}
-        />
+        <TextField fullWidth label="Nueva Categoría" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
         <IconButton onClick={handleAddCategory} color="primary">
           <Add />
         </IconButton>
       </Box>
 
-      {/* 🔹 Guardar todos los cambios en la BD */}
       <Button variant="contained" color="primary" onClick={handleSave} startIcon={<Save />}>
         Guardar Cambios
       </Button>

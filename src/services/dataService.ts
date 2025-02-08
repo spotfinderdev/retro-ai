@@ -94,3 +94,16 @@ export const saveCategory = async (categoryName: string, items: string[]) => {
 
     return response.json();
 };
+
+export async function uploadCsvData(formData: FormData) {
+    const response = await fetch("http://localhost:5000/api/upload-csv", {
+      method: "POST",
+      body: formData,
+    });
+  
+    if (!response.ok) {
+      throw new Error("Error al subir el archivo CSV");
+    }
+  
+    return await response.json();
+  }
