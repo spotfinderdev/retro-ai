@@ -4,6 +4,8 @@ import {
   Card, CardContent, Typography, Container, Box, TextField, Button, IconButton, List, ListItem, ListItemText, Checkbox 
 } from "@mui/material";
 import { Add, Save, Delete, UploadFile } from "@mui/icons-material";
+import { Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
+import { uploadCsvData } from "../services/dataService";
 
 const formatCategoryName = (category: string) => {
   return category.replace(/([A-Z])/g, " $1").trim().replace(/^./, (str) => str.toUpperCase());
@@ -20,6 +22,11 @@ export default function DataManager() {
   const [newEntries, setNewEntries] = useState<{ [key: string]: string }>({});
   const [selectedItems, setSelectedItems] = useState<{ [key: string]: Set<string> }>({});
   const [csvFiles, setCsvFiles] = useState<{ [key: string]: File | null }>({});
+
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [openModal, setOpenModal] = useState(false);
+  const [csvPreview, setCsvPreview] = useState<string[]>([]);
+
 
   useEffect(() => {
     fetchData()
@@ -137,6 +144,59 @@ export default function DataManager() {
     reader.readAsText(csvFiles[categoryName]!);
   };
 
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>, category: string) => {
+    console.log("📂 handleFileSelect llamado para la categoría:", category);
+  
+    const file = event.target.files?.[0];
+    if (file) {
+      console.log(`📂 Archivo seleccionado para ${category}:`, file.name);
+  
+      setCsvFiles((prev) => ({ ...prev, [category]: file }));
+      setSelectedCategory(category);
+  
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        setCsvPreview(text.split("\n").slice(0, 5));
+        console.log("📄 Vista previa del CSV:", text.split("\n").slice(0, 5));
+        console.log("🟢 Abriendo el modal...");
+        setOpenModal(true);
+      };
+      reader.readAsText(file);
+    } else {
+      console.log("⚠️ No se seleccionó ningún archivo.");
+    }
+  };
+  
+  
+  
+  
+  const handleConfirmCsvUpload = async () => {
+    if (!selectedCategory || !csvFiles[selectedCategory]) {
+      console.error("⚠️ No hay categoría o archivo seleccionado");
+      return;
+    }
+  
+    console.log(`⬆️ Subiendo archivo CSV: ${csvFiles[selectedCategory]?.name} para la categoría ${selectedCategory}`);
+  
+    const formData = new FormData();
+    formData.append("file", csvFiles[selectedCategory]!);
+    formData.append("category", revertCategoryName(selectedCategory));
+  
+    try {
+      const response = await uploadCsvData(formData);
+      console.log("✅ Respuesta del servidor:", response);
+    } catch (error) {
+      console.error("❌ Error al subir el archivo CSV:", error);
+    }
+  
+    setOpenModal(false);
+    fetchData().then(setData);
+  };
+  
+  
+  
+
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       <Box sx={{ textAlign: "center", mb: 4 }}>
@@ -189,10 +249,20 @@ export default function DataManager() {
                 Eliminar seleccionados
               </Button>
 
-              <Button component="label" variant="contained" startIcon={<UploadFile />} sx={{ background: "#0077C8", color: "#fff", "&:hover": { background: "#005999" } }}>
-                Cargar CSV
-                <input type="file" accept=".csv" hidden onChange={(e) => setCsvFiles({ ...csvFiles, [category]: e.target.files?.[0] || null })} />
-              </Button>
+              <Button component="label" variant="contained" startIcon={<UploadFile />} sx={{ background: "#0077C8", color: "#fff", "&:hover": { background: "#005999" }}}>
+  Cargar CSV
+  <input 
+    type="file" 
+    accept=".csv" 
+    hidden 
+    onChange={(e) => {
+      console.log("📂 Archivo seleccionado en input");
+      handleFileSelect(e, category);
+    }} 
+  />
+</Button>
+
+
             </Box>
           </CardContent>
         </Card>
@@ -208,6 +278,38 @@ export default function DataManager() {
       <Button variant="contained" color="primary" onClick={handleSave} startIcon={<Save />}>
         Guardar Cambios
       </Button>
+      <Dialog open={openModal} onClose={() => setOpenModal(false)}>
+  <DialogTitle>Confirmar carga de CSV</DialogTitle>
+  <DialogContent>
+    <Typography>Archivo: {selectedCategory ? csvFiles[selectedCategory]?.name : "Ningún archivo seleccionado"}</Typography>
+    <List>
+      {csvPreview.length > 0 ? (
+        csvPreview.map((line, i) => <ListItem key={i}><ListItemText primary={line} /></ListItem>)
+      ) : (
+        <Typography color="textSecondary">No hay vista previa disponible.</Typography>
+      )}
+    </List>
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => {
+      console.log("🚫 Cancelar presionado");
+      setOpenModal(false);
+    }}>
+      Cancelar
+    </Button>
+    <Button 
+      onClick={() => {
+        console.log("✅ Confirmar carga de CSV ejecutado");
+        handleConfirmCsvUpload();
+      }} 
+      color="primary" 
+      variant="contained"
+    >
+      Confirmar
+    </Button>
+  </DialogActions>
+</Dialog>
+
     </Container>
   );
 }

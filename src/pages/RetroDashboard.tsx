@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, Typography, Container, Box, TextField, Button, Divider } from "@mui/material";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { fetchData } from "../services/dataService";
+import { fetchData, fetchDataJson } from "../services/dataService";
 
 interface RetroSummary {
   [key: string]: string[];
 }
+
+interface SummaryJson {
+    [key: string]: { [attribute: string]: string }[];
+  }
+  
 
 interface QAEntry {
   question: string;
@@ -17,6 +22,7 @@ export default function RetroDashboard() {
   const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
   const [retroSummary, setRetroSummary] = useState<RetroSummary>({});
+  const [summaryJson, setSummaryJson] = useState<SummaryJson>({});
   const [history, setHistory] = useState<QAEntry[]>([]);
 
   useEffect(() => {
@@ -42,13 +48,23 @@ export default function RetroDashboard() {
       .catch((error) => console.error("❌ Error al cargar datos:", error));
   }, []);
 
+  useEffect(() => {
+    fetchDataJson()
+      .then((data) => {
+        console.log("📥 Datos JSON recibidos para el chatbot:", data);
+        if (data && typeof data === "object") {
+          setSummaryJson(data); // ✅ Almacena el JSON formateado para el chatbot
+        }
+      })
+      .catch((error) => console.error("❌ Error al cargar datos JSON para el chatbot:", error));
+  }, []);
+
   const handleAsk = async () => {
     setLoading(true);
     setResponse("");
 
     try {
-      const prompt = `Resumen de la retrospectiva:\n\n${JSON.stringify(retroSummary, null, 2)}\n\nPregunta: ${query}`;
-
+        const prompt = `Resumen de la retrospectiva en JSON:\n\n${JSON.stringify(summaryJson, null, 2)}\n\nPregunta: ${query}`;
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.REACT_APP_GEMINI_API_KEY}`,
         {
