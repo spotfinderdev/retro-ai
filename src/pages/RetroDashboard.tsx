@@ -25,6 +25,10 @@ export default function RetroDashboard() {
   const [summaryJson, setSummaryJson] = useState<SummaryJson>({});
   const [history, setHistory] = useState<QAEntry[]>([]);
 
+  const [chartDataDinamic, setChartDataDinamic] = useState<{ name: string; value: number }[]>([]);
+const [chartTitle, setChartTitle] = useState<string>("");
+  
+
   useEffect(() => {
     fetchData()
       .then((data) => {
@@ -64,7 +68,35 @@ export default function RetroDashboard() {
     setResponse("");
 
     try {
-        const prompt = `Resumen de la retrospectiva en JSON:\n\n${JSON.stringify(summaryJson, null, 2)}\n\nPregunta: ${query}`;
+       // const promptOld = `Resumen de la retrospectiva en JSON:\n\n${JSON.stringify(summaryJson, null, 2)}\n\nPregunta: ${query}`;
+
+       const prompt = `
+       Resumen de la retrospectiva en JSON:\n\n${JSON.stringify(summaryJson, null, 2)}
+       
+       Pregunta: ${query}
+       
+       ⚠️ IMPORTANTE: Si la pregunta requiere una respuesta numérica o estadística, responde SOLO con JSON limpio en este formato:
+       
+       {
+         "type": "chart",
+         "title": "Título del gráfico",
+         "data": [
+           { "name": "Categoría 1", "value": 100 },
+           { "name": "Categoría 2", "value": 200 },
+           { "name": "Categoría 3", "value": 150 }
+         ]
+       }
+       
+       Si la pregunta requiere un valor numérico, responde SOLO con este JSON:
+       {
+         "type": "value",
+         "value": 50
+       }
+       
+       Si la pregunta no requiere datos numéricos ni gráficos, responde solo con texto normal sin envolver en JSON.
+       `;
+
+
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.REACT_APP_GEMINI_API_KEY}`,
         {
@@ -74,13 +106,45 @@ export default function RetroDashboard() {
         }
       );
 
-      const data = await res.json();
+     /*  const data = await res.json();
       console.log("🔹 Respuesta del bot:", data);
       const formattedResponse =
         data.candidates?.[0]?.content?.parts?.[0]?.text.trim().replace(/\n/g, "\n\n") || "No tengo una respuesta.";
 
       setResponse(formattedResponse);
+      setHistory((prevHistory) => [{ question: query, answer: formattedResponse }, ...prevHistory]); */
+
+
+      const data = await res.json();
+      console.log("🔹 Respuesta del bot (sin procesar):", data);
+      
+      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text.trim();
+      let formattedResponse = responseText || "No tengo una respuesta.";
+      
+      try {
+        // 🔹 Limpiar caracteres adicionales y parsear JSON
+        const jsonStart = responseText.indexOf("{");
+        const jsonEnd = responseText.lastIndexOf("}") + 1;
+        const cleanJson = responseText.substring(jsonStart, jsonEnd);
+      
+        const parsedJson = JSON.parse(cleanJson);
+        console.log("🔹 JSON procesado:", parsedJson);
+      
+        if (parsedJson.type === "chart" && Array.isArray(parsedJson.data)) {
+          setChartDataDinamic(parsedJson.data); // ✅ Guarda datos para el gráfico dinámico
+          setChartTitle(parsedJson.title);
+          formattedResponse = `📊 Se generó un gráfico: ${parsedJson.title}`;
+        } else if (parsedJson.type === "value") {
+          formattedResponse = `🔢 Resultado: ${parsedJson.value}`;
+        }
+      } catch (error) {
+        console.log("🔹 No es JSON, mostrando como texto.");
+      }
+      
+      setResponse(formattedResponse);
       setHistory((prevHistory) => [{ question: query, answer: formattedResponse }, ...prevHistory]);
+      
+
     } catch (error) {
       console.error("❌ Error en la consulta:", error);
       setResponse("Error en la consulta.");
@@ -143,6 +207,29 @@ export default function RetroDashboard() {
         </CardContent>
       </Card>
 
+        {/* 🔹 Mostrar gráfico si Gemini devuelve datos */}
+{chartDataDinamic.length > 0 && chartTitle && (
+  <Card sx={{ mb: 4, p: 3 }}>
+    <CardContent>
+      <Typography variant="h6">{chartTitle}</Typography>
+      <ResponsiveContainer width="100%" height={300}>
+        <PieChart>
+          <Pie data={chartDataDinamic} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}>
+            {chartDataDinamic.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+            ))}
+          </Pie>
+          <Tooltip />
+          <Legend />
+        </PieChart>
+      </ResponsiveContainer>
+    </CardContent>
+  </Card>
+)}
+
+
+
+
       {/* 🔹 Buscador con IA */}
       <Card sx={{ p: 4, backgroundColor: "#E3F2FD" }}>
         <CardContent>
@@ -173,6 +260,8 @@ export default function RetroDashboard() {
             </CardContent>
           </Card>
         ))}
+
+      
       </Box>
     </Container>
   );
