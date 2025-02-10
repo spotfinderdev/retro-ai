@@ -14,7 +14,16 @@ export default function Sidebar() {
       sx={{
         width: drawerWidth,
         flexShrink: 0,
-        "& .MuiDrawer-paper": { width: drawerWidth, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: 2 },
+        "& .MuiDrawer-paper": {
+          width: drawerWidth,
+          boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: 2,
+          backgroundColor: "#1F272B", // 🎨 Color oscuro basado en el logo
+          color: "white",
+        },
       }}
     >
       {/* 🔹 Espaciado superior */}
@@ -23,13 +32,15 @@ export default function Sidebar() {
       {/* 🔹 Lista de navegación */}
       <Box sx={{ flexGrow: 1 }}>
         <List>
-          <ListItem component="div" onClick={() => navigate("/")} sx={{ cursor: "pointer" }}>
+        <ListItem component="div" onClick={() => navigate("/")} 
+  sx={{ cursor: "pointer", "&:hover": { backgroundColor: "#26343A" } }}
+>
             <ListItemIcon>
               <Dashboard />
             </ListItemIcon>
             <ListItemText primary="Dashboard" />
           </ListItem>
-          <ListItem component="div" onClick={() => navigate("/data-manager")} sx={{ cursor: "pointer" }}>
+          <ListItem component="div" onClick={() => navigate("/data-manager")} sx={{ cursor: "pointer", "&:hover": { backgroundColor: "#26343A" } }}>
             <ListItemIcon>
               <Storage />
             </ListItemIcon>

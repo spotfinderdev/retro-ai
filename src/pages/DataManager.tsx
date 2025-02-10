@@ -211,7 +211,7 @@ export default function DataManager() {
             WebkitTextFillColor: "transparent",
           }}
         >
-          ::KyourD:: DataManager
+          DataManager
         </Typography>
       </Box>
 

@@ -185,7 +185,7 @@ export default function RetroDashboard() {
             WebkitTextFillColor: "transparent",
           }}
         >
-          ::KyourD:: Dashboard
+          Dashboard
         </Typography>
       </Box>
   
