@@ -23,10 +23,21 @@ export default function RetroDashboard() {
   const [loading, setLoading] = useState(false);
   const [retroSummary, setRetroSummary] = useState<RetroSummary>({});
   const [summaryJson, setSummaryJson] = useState<SummaryJson>({});
-  const [history, setHistory] = useState<QAEntry[]>([]);
-
-  const [chartDataDinamic, setChartDataDinamic] = useState<{ name: string; value: number }[]>([]);
-const [chartTitle, setChartTitle] = useState<string>("");
+  const [history, setHistory] = useState<QAEntry[]>(() => {
+    // 🔹 Recupera historial desde localStorage si existe
+    const savedHistory = localStorage.getItem("retro_ai_history");
+    return savedHistory ? JSON.parse(savedHistory) : [];
+  });
+  
+  const [chartDataDinamic, setChartDataDinamic] = useState<{ name: string; value: number }[]>(() => {
+    const savedChartData = localStorage.getItem("retro_ai_chart_data");
+    return savedChartData ? JSON.parse(savedChartData) : [];
+  });
+  
+  const [chartTitle, setChartTitle] = useState<string>(() => {
+    return localStorage.getItem("retro_ai_chart_title") || "";
+  });
+  
   
 
   useEffect(() => {
@@ -63,13 +74,13 @@ const [chartTitle, setChartTitle] = useState<string>("");
       .catch((error) => console.error("❌ Error al cargar datos JSON para el chatbot:", error));
   }, []);
 
+
+  
   const handleAsk = async () => {
     setLoading(true);
     setResponse("");
 
-    try {
-       // const promptOld = `Resumen de la retrospectiva en JSON:\n\n${JSON.stringify(summaryJson, null, 2)}\n\nPregunta: ${query}`;
-
+    try {   
        const prompt = `
        Resumen de la retrospectiva en JSON:\n\n${JSON.stringify(summaryJson, null, 2)}
        
@@ -96,7 +107,6 @@ const [chartTitle, setChartTitle] = useState<string>("");
        Si la pregunta no requiere datos numéricos ni gráficos, responde solo con texto normal sin envolver en JSON.
        `;
 
-
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.REACT_APP_GEMINI_API_KEY}`,
         {
@@ -105,15 +115,6 @@ const [chartTitle, setChartTitle] = useState<string>("");
           body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
         }
       );
-
-     /*  const data = await res.json();
-      console.log("🔹 Respuesta del bot:", data);
-      const formattedResponse =
-        data.candidates?.[0]?.content?.parts?.[0]?.text.trim().replace(/\n/g, "\n\n") || "No tengo una respuesta.";
-
-      setResponse(formattedResponse);
-      setHistory((prevHistory) => [{ question: query, answer: formattedResponse }, ...prevHistory]); */
-
 
       const data = await res.json();
       console.log("🔹 Respuesta del bot (sin procesar):", data);
@@ -131,8 +132,10 @@ const [chartTitle, setChartTitle] = useState<string>("");
         console.log("🔹 JSON procesado:", parsedJson);
       
         if (parsedJson.type === "chart" && Array.isArray(parsedJson.data)) {
-          setChartDataDinamic(parsedJson.data); // ✅ Guarda datos para el gráfico dinámico
+          setChartDataDinamic(parsedJson.data);
           setChartTitle(parsedJson.title);
+          localStorage.setItem("retro_ai_chart_data", JSON.stringify(parsedJson.data));
+          localStorage.setItem("retro_ai_chart_title", parsedJson.title);
           formattedResponse = `📊 Se generó un gráfico: ${parsedJson.title}`;
         } else if (parsedJson.type === "value") {
           formattedResponse = `🔢 Resultado: ${parsedJson.value}`;
@@ -140,10 +143,13 @@ const [chartTitle, setChartTitle] = useState<string>("");
       } catch (error) {
         console.log("🔹 No es JSON, mostrando como texto.");
       }
-      
+
+      // 🔹 Actualiza historial y almacena en localStorage
+      const updatedHistory = [{ question: query, answer: formattedResponse }, ...history];
+      setHistory(updatedHistory);
+      localStorage.setItem("retro_ai_history", JSON.stringify(updatedHistory));
+
       setResponse(formattedResponse);
-      setHistory((prevHistory) => [{ question: query, answer: formattedResponse }, ...prevHistory]);
-      
 
     } catch (error) {
       console.error("❌ Error en la consulta:", error);
@@ -152,8 +158,9 @@ const [chartTitle, setChartTitle] = useState<string>("");
       setLoading(false);
       setQuery("");
     }
-  };
+};
 
+  
   // 🔹 Generar datos dinámicos para el gráfico excluyendo categorías vacías
   const chartData = Object.entries(retroSummary)
     .filter(([_, items]) => items.length > 0)
@@ -165,16 +172,15 @@ const [chartTitle, setChartTitle] = useState<string>("");
   const colors = ["#4caf50", "#ffeb3b", "#f44336", "#2196F3", "#9C27B0", "#FF9800"];
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-
-     <Box sx={{ textAlign: "center", mb: 4 }}>
+    <Container maxWidth="lg" sx={{ py: 4 }}> {/* Aumentamos el tamaño del container */}
+      <Box sx={{ textAlign: "center", mb: 4 }}>
         <Typography
           variant="h4"
           sx={{
             fontWeight: "bold",
-            letterSpacing: 2, // 🔹 Espaciado entre letras
-            textShadow: "2px 2px 6px rgba(0, 0, 0, 0.3)", // 🔹 Sombra para profundidad
-            background: "linear-gradient(90deg, #FF6E4B, #0077C8, #4CAF50)", // 🎨 Degradado en el texto
+            letterSpacing: 2,
+            textShadow: "2px 2px 6px rgba(0, 0, 0, 0.3)",
+            background: "linear-gradient(90deg, #FF6E4B, #0077C8, #4CAF50)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
           }}
@@ -182,56 +188,58 @@ const [chartTitle, setChartTitle] = useState<string>("");
           ::KyourD:: Dashboard
         </Typography>
       </Box>
-      
-      {/* 🔹 Gráfico de Pastel Dinámico */}
-      <Card sx={{ mb: 4, p: 3 }}>
-        <CardContent>
-          <Typography variant="h6">General Distribution</Typography>
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <Typography align="center" color="textSecondary">
-              No hay datos para mostrar.
-            </Typography>
-          )}
-        </CardContent>
-      </Card>
-
-        {/* 🔹 Mostrar gráfico si Gemini devuelve datos */}
-{chartDataDinamic.length > 0 && chartTitle && (
-  <Card sx={{ mb: 4, p: 3 }}>
-    <CardContent>
-      <Typography variant="h6">{chartTitle}</Typography>
-      <ResponsiveContainer width="100%" height={300}>
-        <PieChart>
-          <Pie data={chartDataDinamic} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}>
-            {chartDataDinamic.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-            ))}
-          </Pie>
-          <Tooltip />
-          <Legend />
-        </PieChart>
-      </ResponsiveContainer>
-    </CardContent>
-  </Card>
-)}
-
-
-
+  
+      {/* 🔹 Sección de gráficos en dos columnas */}
+      <Box display="flex" flexWrap="wrap" justifyContent="center" gap={4}>
+  
+        {/* 🔹 Gráfico de Distribución General */}
+        <Card sx={{ flex: "1 1 48%", p: 3, minWidth: "350px" }}>
+          <CardContent>
+            <Typography variant="h6">General Distribution</Typography>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
+                <PieChart>
+                  <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <Typography align="center" color="textSecondary">
+                No hay datos para mostrar.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+  
+        {/* 🔹 Gráfico Dinámico generado por AI */}
+        {chartDataDinamic.length > 0 && chartTitle && (
+          <Card sx={{ flex: "1 1 48%", p: 3, minWidth: "350px" }}>
+            <CardContent>
+              <Typography variant="h6">{chartTitle}</Typography>
+              <ResponsiveContainer width="100%" height={400}>
+                <PieChart>
+                  <Pie data={chartDataDinamic} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140}>
+                    {chartDataDinamic.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+  
+</Box>
 
       {/* 🔹 Buscador con IA */}
-      <Card sx={{ p: 4, backgroundColor: "#E3F2FD" }}>
+      <Card sx={{ p: 4, backgroundColor: "#E3F2FD", mt: 4 }}>
         <CardContent>
           <Typography variant="h6" align="center" color="primary">Consultas</Typography>
           <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
@@ -242,7 +250,7 @@ const [chartTitle, setChartTitle] = useState<string>("");
           </Box>
         </CardContent>
       </Card>
-
+  
       {/* 🔹 Historial de preguntas y respuestas */}
       <Box mt={4}>
         {history.map((entry, index) => (
@@ -260,9 +268,7 @@ const [chartTitle, setChartTitle] = useState<string>("");
             </CardContent>
           </Card>
         ))}
-
-      
       </Box>
     </Container>
   );
-}
+              }  
