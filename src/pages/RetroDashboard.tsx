@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, Typography, Container, Box, TextField, Button, Divider } from "@mui/material";
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, 
+    BarChart, Bar, XAxis, YAxis, LineChart, Line, 
+    AreaChart, Area, ScatterChart, Scatter } from "recharts";
 import { fetchData, fetchDataJson } from "../services/dataService";
 
 interface RetroSummary {
@@ -24,19 +26,30 @@ export default function RetroDashboard() {
   const [retroSummary, setRetroSummary] = useState<RetroSummary>({});
   const [summaryJson, setSummaryJson] = useState<SummaryJson>({});
   const [history, setHistory] = useState<QAEntry[]>(() => {
-    // 🔹 Recupera historial desde localStorage si existe
     const savedHistory = localStorage.getItem("retro_ai_history");
     return savedHistory ? JSON.parse(savedHistory) : [];
   });
-  
+
   const [chartDataDinamic, setChartDataDinamic] = useState<{ name: string; value: number }[]>(() => {
     const savedChartData = localStorage.getItem("retro_ai_chart_data");
     return savedChartData ? JSON.parse(savedChartData) : [];
   });
-  
   const [chartTitle, setChartTitle] = useState<string>(() => {
     return localStorage.getItem("retro_ai_chart_title") || "";
   });
+  
+  const [chartType, setChartType] = useState<"pie" | "bar" | "line" | "area" | "scatter">(() => {
+    return (localStorage.getItem("retro_ai_chart_type") as "pie" | "bar" | "line" | "area" | "scatter") || "pie";
+  });
+
+
+// 🔹 Cargar el tipo de gráfico desde localStorage al montar el componente
+useEffect(() => {
+    const storedChartType = localStorage.getItem("retro_ai_chart_type") as "pie" | "bar" | "line" | "area" | "scatter";
+    if (storedChartType) {
+      setChartType(storedChartType);
+    }
+  }, []);
   
   
 
@@ -74,14 +87,13 @@ export default function RetroDashboard() {
       .catch((error) => console.error("❌ Error al cargar datos JSON para el chatbot:", error));
   }, []);
 
-
-  
   const handleAsk = async () => {
     setLoading(true);
     setResponse("");
 
-    try {   
-       const prompt = `
+    try {
+     
+   const prompt = `
        Resumen de la retrospectiva en JSON:\n\n${JSON.stringify(summaryJson, null, 2)}
        
        Pregunta: ${query}
@@ -106,6 +118,7 @@ export default function RetroDashboard() {
        
        Si la pregunta no requiere datos numéricos ni gráficos, responde solo con texto normal sin envolver en JSON.
        `;
+
 
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.REACT_APP_GEMINI_API_KEY}`,
@@ -132,24 +145,24 @@ export default function RetroDashboard() {
         console.log("🔹 JSON procesado:", parsedJson);
       
         if (parsedJson.type === "chart" && Array.isArray(parsedJson.data)) {
-          setChartDataDinamic(parsedJson.data);
-          setChartTitle(parsedJson.title);
-          localStorage.setItem("retro_ai_chart_data", JSON.stringify(parsedJson.data));
-          localStorage.setItem("retro_ai_chart_title", parsedJson.title);
-          formattedResponse = `📊 Se generó un gráfico: ${parsedJson.title}`;
-        } else if (parsedJson.type === "value") {
+            setChartDataDinamic(parsedJson.data);
+            setChartTitle(parsedJson.title);
+          
+            // 🔹 Guardar en localStorage
+            localStorage.setItem("retro_ai_chart_data", JSON.stringify(parsedJson.data));
+            localStorage.setItem("retro_ai_chart_title", parsedJson.title);
+          
+            formattedResponse = `📊 Se generó un gráfico: ${parsedJson.title}`;
+          }else if (parsedJson.type === "value") {
           formattedResponse = `🔢 Resultado: ${parsedJson.value}`;
         }
       } catch (error) {
         console.log("🔹 No es JSON, mostrando como texto.");
       }
-
-      // 🔹 Actualiza historial y almacena en localStorage
-      const updatedHistory = [{ question: query, answer: formattedResponse }, ...history];
-      setHistory(updatedHistory);
-      localStorage.setItem("retro_ai_history", JSON.stringify(updatedHistory));
-
+      
       setResponse(formattedResponse);
+      setHistory((prevHistory) => [{ question: query, answer: formattedResponse }, ...prevHistory]);
+      
 
     } catch (error) {
       console.error("❌ Error en la consulta:", error);
@@ -158,9 +171,8 @@ export default function RetroDashboard() {
       setLoading(false);
       setQuery("");
     }
-};
+  };
 
-  
   // 🔹 Generar datos dinámicos para el gráfico excluyendo categorías vacías
   const chartData = Object.entries(retroSummary)
     .filter(([_, items]) => items.length > 0)
@@ -185,59 +197,121 @@ export default function RetroDashboard() {
             WebkitTextFillColor: "transparent",
           }}
         >
-          Dashboard
+          ::KyourD:: Dashboard
         </Typography>
       </Box>
   
       {/* 🔹 Sección de gráficos en dos columnas */}
-      <Box display="flex" flexWrap="wrap" justifyContent="center" gap={4}>
+      <Box display="flex" flexWrap="nowrap" justifyContent="center" gap={4} overflow="auto">
   
-        {/* 🔹 Gráfico de Distribución General */}
-        <Card sx={{ flex: "1 1 48%", p: 3, minWidth: "350px" }}>
-          <CardContent>
-            <Typography variant="h6">General Distribution</Typography>
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart>
-                  <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <Typography align="center" color="textSecondary">
-                No hay datos para mostrar.
-              </Typography>
-            )}
-          </CardContent>
-        </Card>
-  
-        {/* 🔹 Gráfico Dinámico generado por AI */}
-        {chartDataDinamic.length > 0 && chartTitle && (
-          <Card sx={{ flex: "1 1 48%", p: 3, minWidth: "350px" }}>
-            <CardContent>
-              <Typography variant="h6">{chartTitle}</Typography>
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart>
-                  <Pie data={chartDataDinamic} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140}>
-                    {chartDataDinamic.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-  
+  {/* 🔹 Gráfico de Distribución General */}
+  <Card sx={{ flex: "1 1 50%", p: 3, minWidth: "400px" }}>
+    <CardContent>
+      <Typography variant="h6">General Distribution</Typography>
+      {chartData.length > 0 ? (
+        <ResponsiveContainer width="100%" height={400}>
+          <PieChart>
+            <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140}>
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+              ))}
+            </Pie>
+            <Tooltip />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      ) : (
+        <Typography align="center" color="textSecondary">
+          No hay datos para mostrar.
+        </Typography>
+      )}
+    </CardContent>
+  </Card>
+
+  {/* 🔹 Gráfico Dinámico generado por AI */}
+  {chartDataDinamic.length > 0 && chartTitle && (
+    <Card sx={{ flex: "1 1 50%", p: 3, minWidth: "400px", position: "relative" }}> 
+      <CardContent>
+        <Typography variant="h6">{chartTitle}</Typography>
+
+        {/* 🔹 Selector de Tipo de Gráfico - Ubicado en la parte superior derecha */}
+        <Box sx={{ position: "absolute", top: 10, right: 10, zIndex: 2 }}>
+        <TextField
+  select
+  label="Tipo de gráfico"
+  value={chartType}
+  onChange={(e) => {
+    const selectedType = e.target.value as "pie" | "bar" | "line" | "area" | "scatter";
+    setChartType(selectedType);
+    localStorage.setItem("retro_ai_chart_type", selectedType);
+  }}
+  SelectProps={{
+    native: true,
+  }}
+  variant="outlined"
+  size="small"
+>
+  <option value="pie">Circular</option>
+  <option value="bar">Barras</option>
+  <option value="line">Líneas</option>
+  <option value="area">Áreas</option>
+  <option value="scatter">Puntos</option>
+</TextField>
+
+        </Box>
+
+        <ResponsiveContainer width="100%" height={400}>
+          {chartType === "pie" ? (
+            <PieChart>
+              <Pie data={chartDataDinamic} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140}>
+                {chartDataDinamic.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          ) : chartType === "bar" ? (
+            <BarChart data={chartDataDinamic}>
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="value" fill="#4CAF50" />
+            </BarChart>
+          ) : chartType === "line" ? (
+            <LineChart data={chartDataDinamic}>
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="value" stroke="#FF9800" />
+            </LineChart>
+          ) : chartType === "area" ? (
+            <AreaChart data={chartDataDinamic}>
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Area type="monotone" dataKey="value" stroke="#2196F3" fill="#90CAF9" />
+            </AreaChart>
+          ) : (
+            <ScatterChart>
+              <XAxis type="category" dataKey="name" />
+              <YAxis type="number" />
+              <Tooltip />
+              <Legend />
+              <Scatter data={chartDataDinamic} fill="#9C27B0" />
+            </ScatterChart>
+          )}
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  )}
+
 </Box>
 
+  
       {/* 🔹 Buscador con IA */}
       <Card sx={{ p: 4, backgroundColor: "#E3F2FD", mt: 4 }}>
         <CardContent>
